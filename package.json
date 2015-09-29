@@ -1,0 +1,23 @@
+{
+  "name": "random-scripts",
+  "version": "1.0.0",
+  "description": "",
+  "main": "convert_videos.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/briandipalma/random-scripts.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/briandipalma/random-scripts/issues"
+  },
+  "homepage": "https://github.com/briandipalma/random-scripts#readme",
+  "dependencies": {
+    "cheerio": "^0.19.0",
+    "got": "^4.1.1"
+  }
+}
