@@ -5,24 +5,46 @@
  * Script to download videos from websites.
  */
 
+const fs = require("fs");
+
 const got = require("got");
 const cheerio = require("cheerio");
 
-// Called back with HTML from FT's latest videos website.
-function latestFTVideosCallback(error, html) {
-	if (error) {
-		/*eslint-disable no-console*/
-		console.error(error);
-		/*eslint-enable no-console*/
-	}
+// Given a `videoURL` download it to the pwd.
+function downloadVideo(videoURL) {
+	// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
+	const videoFileName = videoURL.split("/").pop();
 
-	const $ = cheerio.load(html);
+	got
+		.stream(videoURL)
+		.pipe(fs.createWriteStream(videoFileName));
+}
 
-	$(".video-thumb-link").each(function(i, elem) {
-		/*eslint-disable no-console*/
-		console.log($(elem).attr("href"));
-		/*eslint-enable no-console*/
+// Called back with response that contains HTML from FT's video website.
+function extractFTVideoMetaData(response) {
+	const $ = cheerio.load(response.body);
+
+	const nextVideoHTMLURL = $(".coming-next .video-thumb-link").attr("href");
+	const currentVideoURL = $("meta[property='twitter:player:stream']").attr("content");
+
+	return {currentVideoURL, nextVideoHTMLURL};
+}
+
+function getFTVideoURLs() {
+	return new Promise((resolve, reject) => {
+		return got("http://video.ft.com/latest")
+			.then(extractFTVideoMetaData)
+			.then(resolve)
+			.catch(reject);
 	});
 }
 
-got("http://video.ft.com/latest", latestFTVideosCallback);
+getFTVideoURLs()
+	/*eslint-disable no-console*/
+	.then(metadata => {
+		console.log(metadata);
+
+		downloadVideo(metadata.currentVideoURL);
+	})
+	.catch(console.error);
+	/*eslint-enable no-console*/
