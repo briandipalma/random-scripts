@@ -47,11 +47,13 @@ function doesFileExist(fileName) {
 	}
 }
 
-//
+// Request the next video URL and extract its metadata if the previously requested video doesn't already
+// exist on the filesystem or if we haven't reached the video download limit.
 function requestNextVideoURL(videosMetadata, resolve, reject) {
 	return (videoPageMetadata) => {
 		const videoFileExists = doesFileExist(videoPageMetadata.videoFileName);
 
+		// If the previously requested video was previously downloaded then we will not request further videos.
 		if (videoFileExists) {
 			console.log(`Video ${videoPageMetadata.videoFileName} already exists.`);
 
@@ -64,6 +66,7 @@ function requestNextVideoURL(videosMetadata, resolve, reject) {
 					.then(resolve)
 					.catch(reject);
 			} else {
+				// When we reach the video download limit resolve the Promise stack.
 				resolve(videosMetadata);
 			}
 		}
