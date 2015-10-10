@@ -16,11 +16,20 @@ const args = minimist(process.argv.slice(2), {
 });
 
 // Given a `videoURL` download it to the cwd.
-// function downloadVideo(videoURL, videoFileName) {
-// 	got
-// 		.stream(videoURL)
-// 		.pipe(fs.createWriteStream(videoFileName));
-// }
+function downloadVideo(videoURL, videoFileName) {
+	return new Promise((resolve, reject) => {
+		const readableVideoURLStream = got.stream(videoURL);
+		const writableVideoFileStream = fs.createWriteStream(videoFileName);
+
+		readableVideoURLStream.on("error", reject);
+		writableVideoFileStream.on("error", reject);
+		writableVideoFileStream.on("finish", resolve);
+
+		console.log(`Downloading ${videoFileName} from ${videoURL}`);
+
+		readableVideoURLStream.pipe(writableVideoFileStream);
+	});
+}
 
 // Called back with response that contains HTML from FT's video website. Will extract the webpage's video URL
 // and the next video's website URL.
@@ -86,7 +95,12 @@ function getFTVideosMetadata(videoHTMLURL, videosMetadata) {
 
 getFTVideosMetadata("http://video.ft.com/latest", [])
 	.then(metadata => {
-		console.log(metadata);
+		console.log(`Found ${metadata.length} videos to download`);
+
+		metadata.reduce((previousVideoDownloadPromise, currentVideoMetadata) => {
+			return previousVideoDownloadPromise
+				.then(() => downloadVideo(currentVideoMetadata.currentVideoURL, currentVideoMetadata.videoFileName));
+		}, Promise.resolve());
 
 		// downloadVideo(metadata.currentVideoURL, metadata.videoFileName);
 	})
