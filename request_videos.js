@@ -36,10 +36,15 @@ function downloadVideo(videoURL, videoFileName) {
 function extractFTVideoMetadata(response) {
 	const $ = cheerio.load(response.body);
 
+	let videoFileName = "";
 	const nextVideoHTMLURL = $(".coming-next .video-thumb-link").attr("href");
 	const currentVideoURL = $("meta[property='twitter:player:stream']").attr("content");
-	// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
-	const videoFileName = currentVideoURL.split("/").pop();
+	try {
+		// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
+		videoFileName = currentVideoURL.split("/").pop();
+	} catch (e) {
+		console.log(response.body);
+	}
 
 	return {currentVideoURL, nextVideoHTMLURL, videoFileName};
 }
@@ -101,7 +106,5 @@ getFTVideosMetadata("http://video.ft.com/latest", [])
 			return previousVideoDownloadPromise
 				.then(() => downloadVideo(currentVideoMetadata.currentVideoURL, currentVideoMetadata.videoFileName));
 		}, Promise.resolve());
-
-		// downloadVideo(metadata.currentVideoURL, metadata.videoFileName);
 	})
 	.catch(console.error);
