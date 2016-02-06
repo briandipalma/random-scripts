@@ -1,110 +1,82 @@
 #!/usr/bin/env node
-/*eslint-disable no-console*/
-"use strict";
+
+/* eslint-disable no-console */
+"use strict"; // eslint-disable-line
 
 // Script to download videos from websites.
-
-const fs = require("fs");
 
 const got = require("got");
 const cheerio = require("cheerio");
 const minimist = require("minimist");
 
-// Accepts the CLI argument `n` which can be used to configure the max number of videos to download.
+const doesFileExist = require("./utils").doesFileExist;
+const resilientDownloadURL = require("./utils").resilientDownloadURL;
+
+// Accepts the CLI argument `limit` which can be used to configure the max number of videos to download.
 const args = minimist(process.argv.slice(2), {
-	default: {n: 30}
+	default: {limit: 30}
 });
 
-// Given a `videoURL` download it to the cwd.
-function downloadVideo(videoURL, videoFileName) {
-	return new Promise((resolve, reject) => {
-		const readableVideoURLStream = got.stream(videoURL);
-		const writableVideoFileStream = fs.createWriteStream(videoFileName);
-
-		readableVideoURLStream.on("error", reject);
-		writableVideoFileStream.on("error", reject);
-		writableVideoFileStream.on("finish", resolve);
-
-		console.log(`Downloading ${videoFileName} from ${videoURL}`);
-
-		readableVideoURLStream.pipe(writableVideoFileStream);
-	});
-}
-
-// Called back with response that contains HTML from FT's video website. Will extract the webpage's video URL
+// Called back with response that contains HTML for video website. Will extract the webpage's video URL
 // and the next video's website URL.
-function extractFTVideoMetadata(response) {
-	const $ = cheerio.load(response.body);
-
+function extractVideoMetadata(response) {
 	let videoFileName = "";
-	const nextVideoHTMLURL = $(".coming-next .video-thumb-link").attr("href");
-	const currentVideoURL = $("meta[property='twitter:player:stream']").attr("content");
+	const videoWebsite = cheerio.load(response.body);
+
+	const currentVideoURL = videoWebsite("meta[property='twitter:player:stream']").attr("content");
+	const nextVideoHTMLURL = videoWebsite(".coming-next .video-thumb-link").attr("href");
+
 	try {
 		// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
 		videoFileName = currentVideoURL.split("/").pop();
-	} catch (e) {
-		console.log(response.body);
+	} catch (error) {
+		console.error(`Error while extracting videoFileName from currentVideoURL ${currentVideoURL}`);
+		console.error(error);
 	}
 
 	return {currentVideoURL, nextVideoHTMLURL, videoFileName};
 }
 
-// Check if a file exists.
-function doesFileExist(fileName) {
-	try {
-		fs.statSync(fileName);
+// Given the current video's metadata request the next video webpage if the download limit
+// hasn't been reached.
+function requestNextVideoURL(videoPageMetadata, videosMetadata) {
+	console.log(`Received video metadata ${JSON.stringify(videoPageMetadata, null, "\t")}`);
 
-		// If no error was raised the file exists.
-		return true;
-	} catch (error) {
-		return false;
+	videosMetadata.push(videoPageMetadata);
+
+	if (videosMetadata.length < args.limit) {
+		return getVideoMetadata(videoPageMetadata.nextVideoHTMLURL, videosMetadata); // eslint-disable-line
+	}
+
+	return videosMetadata;
+}
+
+// Until the number of videos to download count has been reached keep adding video website metadata into
+// `videosMetadata` array.
+function getVideoMetadata(videoHTMLURL, videosMetadata) {
+	return got(videoHTMLURL)
+		.then(extractVideoMetadata)
+		.then((videoPageMetadata) => requestNextVideoURL(videoPageMetadata, videosMetadata));
+}
+
+// Download all the videos in the `videosMetadata` array without allowing an error in an individual
+// download to stop the other downloads.
+function downloadVideos(videosMetadata) {
+	const videoMetadata = videosMetadata.pop();
+
+	if (videoMetadata) {
+		return resilientDownloadURL(videoMetadata.currentVideoURL, videoMetadata.videoFileName)
+			.then(() => downloadVideos(videosMetadata));
 	}
 }
 
-// Request the next video URL and extract its metadata if the previously requested video doesn't already
-// exist on the filesystem or if we haven't reached the video download limit.
-function requestNextVideoURL(videosMetadata, resolve, reject) {
-	return (videoPageMetadata) => {
-		const videoFileExists = doesFileExist(videoPageMetadata.videoFileName);
+getVideoMetadata("http://video.ft.com/latest", [])
+	.then((videosMetadata) => {
+		console.log(`Found ${videosMetadata.length} videos to download`);
 
-		// If the previously requested video was previously downloaded then we will not request further videos.
-		if (videoFileExists) {
-			console.log(`Video ${videoPageMetadata.videoFileName} already exists.`);
+		const videosToDownload = videosMetadata
+			.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName));
 
-			resolve(videosMetadata);
-		} else {
-			videosMetadata.push(videoPageMetadata);
-
-			if (videosMetadata.length < args.n) {
-				getFTVideosMetadata(videoPageMetadata.nextVideoHTMLURL, videosMetadata)
-					.then(resolve)
-					.catch(reject);
-			} else {
-				// When we reach the video download limit resolve the Promise stack.
-				resolve(videosMetadata);
-			}
-		}
-	};
-}
-
-// Will push into the `videosMetadata` array video website metadata until the maximum number of videos to download
-// limit has been reached.
-function getFTVideosMetadata(videoHTMLURL, videosMetadata) {
-	return new Promise((resolve, reject) => {
-		got(videoHTMLURL)
-			.then(extractFTVideoMetadata)
-			.then(requestNextVideoURL(videosMetadata, resolve, reject))
-			.catch(reject);
-	});
-}
-
-getFTVideosMetadata("http://video.ft.com/latest", [])
-	.then(metadata => {
-		console.log(`Found ${metadata.length} videos to download`);
-
-		metadata.reduce((previousVideoDownloadPromise, currentVideoMetadata) => {
-			return previousVideoDownloadPromise
-				.then(() => downloadVideo(currentVideoMetadata.currentVideoURL, currentVideoMetadata.videoFileName));
-		}, Promise.resolve());
+		return downloadVideos(videosToDownload);
 	})
 	.catch(console.error);
