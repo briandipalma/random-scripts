@@ -5,6 +5,8 @@
 
 // Script to download videos from websites.
 
+const fs = require("fs");
+
 const got = require("got");
 const cheerio = require("cheerio");
 const minimist = require("minimist");
@@ -30,8 +32,9 @@ function extractVideoMetadata(response) {
 		// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
 		videoFileName = currentVideoURL.split("/").pop();
 	} catch (error) {
-		console.error(`Error while extracting videoFileName from currentVideoURL ${currentVideoURL}`);
+		console.error(`***** Error while extracting videoFileName from ${currentVideoURL} *****`);
 		console.error(error);
+		fs.writeFileSync(`error_${Date.now()}.html`, response.body);
 	}
 
 	return {currentVideoURL, nextVideoHTMLURL, videoFileName};
@@ -40,8 +43,6 @@ function extractVideoMetadata(response) {
 // Given the current video's metadata request the next video webpage if the download limit
 // hasn't been reached.
 function requestNextVideoURL(videoPageMetadata, videosMetadata) {
-	console.log(`Received video metadata ${JSON.stringify(videoPageMetadata, null, "\t")}`);
-
 	videosMetadata.push(videoPageMetadata);
 
 	if (videosMetadata.length < args.limit) {
@@ -72,10 +73,11 @@ function downloadVideos(videosMetadata) {
 
 getVideoMetadata("http://video.ft.com/latest", [])
 	.then((videosMetadata) => {
-		console.log(`Found ${videosMetadata.length} videos to download`);
-
 		const videosToDownload = videosMetadata
-			.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName));
+			.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName))
+			.filter((videoMetadata) => videoMetadata.videoFileName !== "");
+
+		console.log(`Found ${videosToDownload.length} videos to download`);
 
 		return downloadVideos(videosToDownload);
 	})
