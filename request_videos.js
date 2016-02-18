@@ -55,9 +55,11 @@ function requestNextVideoURL(videoPageMetadata, videosMetadata) {
 // Until the number of videos to download count has been reached keep adding video website metadata into
 // `videosMetadata` array.
 function getVideoMetadata(videoHTMLURL, videosMetadata) {
-	return got(videoHTMLURL)
-		.then(extractVideoMetadata)
-		.then((videoPageMetadata) => requestNextVideoURL(videoPageMetadata, videosMetadata));
+	const nextVideoMetadata = (videoPageMetadata) => requestNextVideoURL(videoPageMetadata, videosMetadata);
+	const videoWebpageHTML = got(videoHTMLURL);
+	const videoWebpageMetadata = videoWebpageHTML.then(extractVideoMetadata);
+
+	return videoWebpageMetadata.then(nextVideoMetadata);
 }
 
 // Download all the videos in the `videosMetadata` array without allowing an error in an individual
@@ -66,19 +68,28 @@ function downloadVideos(videosMetadata) {
 	const videoMetadata = videosMetadata.pop();
 
 	if (videoMetadata) {
-		return resilientDownloadURL(videoMetadata.currentVideoURL, videoMetadata.videoFileName)
-			.then(() => downloadVideos(videosMetadata));
+		const downloadNextVideo = () => downloadVideos(videosMetadata);
+		const resilientVideoDownload = resilientDownloadURL(
+			videoMetadata.currentVideoURL, videoMetadata.videoFileName
+		);
+
+		return resilientVideoDownload.then(downloadNextVideo);
 	}
 }
 
-getVideoMetadata("http://video.ft.com/latest", [])
-	.then((videosMetadata) => {
-		const videosToDownload = videosMetadata
-			.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName))
-			.filter((videoMetadata) => videoMetadata.videoFileName !== "");
+// Filter out any videos with invalid/incomplete metadata or which have already been downloaded
+// and download the remaining ones.
+function downloadNewValidVideos(videosMetadata) {
+	const videosToDownload = videosMetadata
+		.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName))
+		.filter((videoMetadata) => videoMetadata.videoFileName !== "");
 
-		console.log(`Found ${videosToDownload.length} videos to download`);
+	console.log(`Found ${videosToDownload.length} videos to download`);
 
-		return downloadVideos(videosToDownload);
-	})
-	.catch(console.error);
+	return downloadVideos(videosToDownload);
+}
+
+const requestVideoMetada = getVideoMetadata("http://video.ft.com/latest", []);
+const downloadingNewValidVideos = requestVideoMetada.then(downloadNewValidVideos);
+
+downloadingNewValidVideos.catch(console.error);
