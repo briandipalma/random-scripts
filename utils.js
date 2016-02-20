@@ -34,13 +34,17 @@ module.exports.doesFileExist = function doesFileExist(fileName) {
 };
 
 // Log an error showing why a download failed but don't reject the download `Promise`.
-module.exports.resilientDownloadURL = function resilientDownloadURL(resourceURL, resourceFileName) {
-	return module.exports.downloadURL(resourceURL, resourceFileName)
-		.then(
-			() => console.log(`Succesfully downloaded ${resourceURL} to ${resourceFileName}.`),
-			(error) => {
-				console.error(`****** Downloading ${resourceURL} to ${resourceFileName} failed! *****`);
-				console.error(error);
-			}
-		);
+module.exports.resilientDownloadURL = function resilientDownloadURL(resourceURL, resourceFileName, success) {
+	const downloadFromURL = module.exports.downloadURL(resourceURL, resourceFileName);
+
+	function downloadFailed(error) {
+		console.error(`****** Downloading ${resourceURL} to ${resourceFileName} failed! *****`);
+		console.error(error);
+	}
+	function downloadSuccesful() {
+		console.log(`Succesfully downloaded ${resourceURL} to ${resourceFileName}.`);
+		success(resourceFileName);
+	}
+
+	return downloadFromURL.then(downloadSuccesful, downloadFailed);
 };
