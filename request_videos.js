@@ -18,6 +18,19 @@ const resilientDownloadURL = require("./utils").resilientDownloadURL;
 const args = minimist(process.argv.slice(2), {
 	default: {limit: 30}
 });
+// Pretend this is a database.
+const DOWNLOADED_FILES_DATABASE = "downloaded-ft-videos.json";
+
+// Once Promises are added to the node API this can be handled more elegantly.
+function getPreviouslyDownloadedFiles() {
+	try {
+		return JSON.parse(fs.readFileSync(DOWNLOADED_FILES_DATABASE));
+	} catch (error) {
+		return {};
+	}
+}
+
+const previouslyDownloadedFiles = getPreviouslyDownloadedFiles();
 
 // Called back with response that contains HTML for video website. Will extract the webpage's video URL
 // and the next video's website URL.
@@ -68,9 +81,10 @@ function downloadVideos(videosMetadata) {
 	const videoMetadata = videosMetadata.pop();
 
 	if (videoMetadata) {
+		const downloadSuccesful = (videoFileName) => previouslyDownloadedFiles[videoFileName] = true;
 		const downloadNextVideo = () => downloadVideos(videosMetadata);
 		const resilientVideoDownload = resilientDownloadURL(
-			videoMetadata.currentVideoURL, videoMetadata.videoFileName
+			videoMetadata.currentVideoURL, videoMetadata.videoFileName, downloadSuccesful
 		);
 
 		return resilientVideoDownload.then(downloadNextVideo);
@@ -82,14 +96,20 @@ function downloadVideos(videosMetadata) {
 function downloadNewValidVideos(videosMetadata) {
 	const videosToDownload = videosMetadata
 		.filter((videoMetadata) => !doesFileExist(videoMetadata.videoFileName))
-		.filter((videoMetadata) => videoMetadata.videoFileName !== "");
+		.filter((videoMetadata) => videoMetadata.videoFileName !== "")
+		.filter((videoMetadata) => previouslyDownloadedFiles[videoMetadata.videoFileName] === undefined);
 
 	console.log(`Found ${videosToDownload.length} videos to download`);
 
 	return downloadVideos(videosToDownload);
 }
 
+function storeDownloadedVideos() {
+	fs.writeFileSync(DOWNLOADED_FILES_DATABASE, JSON.stringify(previouslyDownloadedFiles));
+}
+
 const requestVideoMetada = getVideoMetadata("http://video.ft.com/latest", []);
 const downloadingNewValidVideos = requestVideoMetada.then(downloadNewValidVideos);
+const storingDownloadedVideos = downloadingNewValidVideos.then(storeDownloadedVideos);
 
-downloadingNewValidVideos.catch(console.error);
+storingDownloadedVideos.catch(console.error);
