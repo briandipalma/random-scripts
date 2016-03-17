@@ -45,9 +45,15 @@ function extractVideoMetadata(response) {
 		// The last part of the URL ("dir/videos/the_video.mp4") should contain the name of video file.
 		videoFileName = currentVideoURL.split("/").pop();
 	} catch (error) {
-		console.error(`***** Error while extracting videoFileName from ${currentVideoURL} *****`);
+		const failedDownloadPageURL = videoWebsite("link[rel='canonical']").attr("href");
+
+		console.error(`***** Error while extracting videoFileName from ${failedDownloadPageURL} *****`);
 		console.error(error);
-		fs.writeFileSync(`error_${Date.now()}.html`, response.body);
+
+		if (previouslyDownloadedFiles.failedDownloads[failedDownloadPageURL] === undefined) {
+			fs.writeFileSync(`error_${Date.now()}.html`, response.body);
+			previouslyDownloadedFiles.failedDownloads[failedDownloadPageURL] = true;
+		}
 	}
 
 	return {currentVideoURL, nextVideoHTMLURL, videoFileName};
