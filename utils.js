@@ -9,7 +9,7 @@ const got = require("got");
 module.exports.downloadURL = function downloadURL(resourceURL, resourceFileName) {
 	return new Promise((resolve, reject) => {
 		const fileWriteStream = fs.createWriteStream(resourceFileName);
-		const readableResourceStream = got.stream(resourceURL);
+		const readableResourceStream = got.stream(resourceURL.replace("httpss:", "http:"));
 
 		readableResourceStream.on("error", reject);
 		fileWriteStream.on("error", reject);
